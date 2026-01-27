@@ -1,5 +1,5 @@
 import * as net from "node:net";
-import { resolveFetch } from "../infra/fetch.js";
+import { resolveFetch, createFetchWithRetry } from "../infra/fetch.js";
 import type { TelegramNetworkConfig } from "../config/types.telegram.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { resolveTelegramAutoSelectFamilyDecision } from "./network-config.js";
@@ -7,8 +7,9 @@ import { resolveTelegramAutoSelectFamilyDecision } from "./network-config.js";
 let appliedAutoSelectFamily: boolean | null = null;
 const log = createSubsystemLogger("telegram/network");
 
-// Node 22 workaround: disable autoSelectFamily to avoid Happy Eyeballs timeouts.
-// See: https://github.com/nodejs/node/issues/54359
+const TELEGRAM_FETCH_TIMEOUT_MS = 30_000;
+const TELEGRAM_FETCH_MAX_RETRIES = 3;
+
 function applyTelegramNetworkWorkarounds(network?: TelegramNetworkConfig): void {
   const decision = resolveTelegramAutoSelectFamilyDecision({ network });
   if (decision.value === null || decision.value === appliedAutoSelectFamily) return;
@@ -25,16 +26,23 @@ function applyTelegramNetworkWorkarounds(network?: TelegramNetworkConfig): void 
   }
 }
 
-// Prefer wrapped fetch when available to normalize AbortSignal across runtimes.
 export function resolveTelegramFetch(
   proxyFetch?: typeof fetch,
-  options?: { network?: TelegramNetworkConfig },
+  options?: { network?: TelegramNetworkConfig; enableRetry?: boolean },
 ): typeof fetch | undefined {
   applyTelegramNetworkWorkarounds(options?.network);
-  if (proxyFetch) return resolveFetch(proxyFetch);
-  const fetchImpl = resolveFetch();
-  if (!fetchImpl) {
+
+  const baseFetch = proxyFetch ? resolveFetch(proxyFetch) : resolveFetch();
+  if (!baseFetch) {
     throw new Error("fetch is not available; set channels.telegram.proxy in config");
   }
-  return fetchImpl;
+
+  if (options?.enableRetry === false) {
+    return baseFetch;
+  }
+
+  return createFetchWithRetry(baseFetch, {
+    attempts: TELEGRAM_FETCH_MAX_RETRIES,
+    timeoutMs: TELEGRAM_FETCH_TIMEOUT_MS,
+  });
 }
