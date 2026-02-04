@@ -17,11 +17,12 @@ import {
   writeCache,
 } from "./web-shared.js";
 
-const SEARCH_PROVIDERS = ["brave", "perplexity"] as const;
+const SEARCH_PROVIDERS = ["brave", "perplexity", "duckduckgo"] as const;
 const DEFAULT_SEARCH_COUNT = 5;
 const MAX_SEARCH_COUNT = 10;
 
 const BRAVE_SEARCH_ENDPOINT = "https://api.search.brave.com/res/v1/web/search";
+const DUCKDUCKGO_SEARCH_ENDPOINT = "https://duckduckgo.com/html/";
 const DEFAULT_PERPLEXITY_BASE_URL = "https://openrouter.ai/api/v1";
 const PERPLEXITY_DIRECT_BASE_URL = "https://api.perplexity.ai";
 const DEFAULT_PERPLEXITY_MODEL = "perplexity/sonar-pro";
@@ -154,6 +155,9 @@ function resolveSearchProvider(search?: WebSearchConfig): (typeof SEARCH_PROVIDE
   }
   if (raw === "brave") {
     return "brave";
+  }
+  if (raw === "duckduckgo" || raw === "ddg") {
+    return "duckduckgo";
   }
   return "brave";
 }
@@ -353,7 +357,7 @@ async function runPerplexitySearch(params: {
 async function runWebSearch(params: {
   query: string;
   count: number;
-  apiKey: string;
+  apiKey?: string;
   timeoutSeconds: number;
   cacheTtlMs: number;
   provider: (typeof SEARCH_PROVIDERS)[number];
@@ -377,6 +381,9 @@ async function runWebSearch(params: {
   const start = Date.now();
 
   if (params.provider === "perplexity") {
+    if (!params.apiKey) {
+      throw new Error("Missing Perplexity API key.");
+    }
     const { content, citations } = await runPerplexitySearch({
       query: params.query,
       apiKey: params.apiKey,
@@ -397,8 +404,29 @@ async function runWebSearch(params: {
     return payload;
   }
 
+  if (params.provider === "duckduckgo") {
+    const payload = await runDuckDuckGoSearch({
+      query: params.query,
+      count: params.count,
+      timeoutSeconds: params.timeoutSeconds,
+    });
+    const response = {
+      query: params.query,
+      provider: params.provider,
+      count: payload.results.length,
+      tookMs: Date.now() - start,
+      results: payload.results,
+    };
+    writeCache(SEARCH_CACHE, cacheKey, response, params.cacheTtlMs);
+    return response;
+  }
+
   if (params.provider !== "brave") {
     throw new Error("Unsupported web search provider.");
+  }
+
+  if (!params.apiKey) {
+    throw new Error("Missing Brave Search API key.");
   }
 
   const url = new URL(BRAVE_SEARCH_ENDPOINT);
@@ -458,6 +486,92 @@ async function runWebSearch(params: {
   return payload;
 }
 
+function decodeDuckDuckGoUrl(raw: string): string {
+  if (!raw) {
+    return raw;
+  }
+  try {
+    const resolved = raw.startsWith("/") ? new URL(raw, "https://duckduckgo.com") : new URL(raw);
+    if (resolved.hostname.endsWith("duckduckgo.com") && resolved.pathname === "/l/") {
+      const target = resolved.searchParams.get("uddg");
+      if (target) {
+        return target;
+      }
+    }
+    return resolved.toString();
+  } catch {
+    return raw;
+  }
+}
+
+function stripHtml(value: string): string {
+  return value
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&#x2F;/g, "/");
+}
+
+async function runDuckDuckGoSearch(params: {
+  query: string;
+  count: number;
+  timeoutSeconds: number;
+}): Promise<{
+  results: Array<{ title: string; url: string; description: string; siteName?: string }>;
+}> {
+  const url = new URL(DUCKDUCKGO_SEARCH_ENDPOINT);
+  url.searchParams.set("q", params.query);
+  url.searchParams.set("kl", "us-en");
+
+  const res = await fetch(url.toString(), {
+    method: "GET",
+    headers: {
+      Accept: "text/html",
+      "User-Agent": "OpenClaw Web Search",
+    },
+    signal: withTimeout(undefined, params.timeoutSeconds * 1000),
+  });
+
+  if (!res.ok) {
+    const detail = await readResponseText(res);
+    throw new Error(`DuckDuckGo search error (${res.status}): ${detail || res.statusText}`);
+  }
+
+  const html = await res.text();
+  const results: Array<{ title: string; url: string; description: string; siteName?: string }> = [];
+  const titleRegex = /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
+  let match = titleRegex.exec(html);
+  while (match && results.length < params.count) {
+    const rawUrl = decodeHtmlEntities(match[1] ?? "");
+    const urlValue = decodeDuckDuckGoUrl(rawUrl);
+    const rawTitle = decodeHtmlEntities(stripHtml(match[2] ?? ""));
+    const snippetRegex = new RegExp(
+      `<a[^>]*class=\\"result__snippet\\"[^>]*>([\\s\\S]*?)<\\/a>|<div[^>]*class=\\"result__snippet\\"[^>]*>([\\s\\S]*?)<\\/div>`,
+    );
+    const snippetMatch = snippetRegex.exec(html.slice(match.index));
+    const rawSnippet = decodeHtmlEntities(stripHtml(snippetMatch?.[1] ?? snippetMatch?.[2] ?? ""));
+    const siteName = resolveSiteName(urlValue);
+    results.push({
+      title: rawTitle ? wrapWebContent(rawTitle, "web_search") : "",
+      url: urlValue,
+      description: rawSnippet ? wrapWebContent(rawSnippet, "web_search") : "",
+      siteName: siteName || undefined,
+    });
+    match = titleRegex.exec(html);
+  }
+
+  return { results };
+}
+
 export function createWebSearchTool(options?: {
   config?: OpenClawConfig;
   sandboxed?: boolean;
@@ -473,7 +587,9 @@ export function createWebSearchTool(options?: {
   const description =
     provider === "perplexity"
       ? "Search the web using Perplexity Sonar (direct or via OpenRouter). Returns AI-synthesized answers with citations from real-time web search."
-      : "Search the web using Brave Search API. Supports region-specific and localized search via country and language parameters. Returns titles, URLs, and snippets for fast research.";
+      : provider === "duckduckgo"
+        ? "Search the web using DuckDuckGo (free, no API key). Returns titles, URLs, and snippets for fast research."
+        : "Search the web using Brave Search API. Supports region-specific and localized search via country and language parameters. Returns titles, URLs, and snippets for fast research.";
 
   return {
     label: "Web Search",
@@ -486,7 +602,7 @@ export function createWebSearchTool(options?: {
       const apiKey =
         provider === "perplexity" ? perplexityAuth?.apiKey : resolveSearchApiKey(search);
 
-      if (!apiKey) {
+      if (provider !== "duckduckgo" && !apiKey) {
         return jsonResult(missingSearchKeyPayload(provider));
       }
       const params = args as Record<string, unknown>;

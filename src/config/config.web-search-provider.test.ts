@@ -21,4 +21,19 @@ describe("web search provider config", () => {
 
     expect(res.ok).toBe(true);
   });
+
+  it("accepts duckduckgo provider without api key", () => {
+    const res = validateConfigObject({
+      tools: {
+        web: {
+          search: {
+            enabled: true,
+            provider: "duckduckgo",
+          },
+        },
+      },
+    });
+
+    expect(res.ok).toBe(true);
+  });
 });
