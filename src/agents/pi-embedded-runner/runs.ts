@@ -11,40 +11,95 @@ type EmbeddedPiQueueHandle = {
   abort: () => void;
 };
 
-const ACTIVE_EMBEDDED_RUNS = new Map<string, EmbeddedPiQueueHandle>();
+type RunMetadata = {
+  handle: EmbeddedPiQueueHandle;
+  startTime: number;
+  sessionId: string;
+};
+
+const ACTIVE_EMBEDDED_RUNS = new Map<string, RunMetadata>();
 type EmbeddedRunWaiter = {
   resolve: (ended: boolean) => void;
   timer: NodeJS.Timeout;
 };
 const EMBEDDED_RUN_WAITERS = new Map<string, Set<EmbeddedRunWaiter>>();
 
+// Maximum run duration: 15 minutes
+const MAX_RUN_DURATION_MS = 15 * 60 * 1000;
+// Check for orphaned runs every 30 seconds
+const ORPHAN_CHECK_INTERVAL_MS = 30 * 1000;
+
+/**
+ * Force cleanup orphaned/stuck runs that have exceeded max duration
+ */
+function cleanupOrphanedRuns(): void {
+  const now = Date.now();
+  let cleanedCount = 0;
+
+  for (const [sessionId, metadata] of ACTIVE_EMBEDDED_RUNS.entries()) {
+    const duration = now - metadata.startTime;
+
+    if (duration > MAX_RUN_DURATION_MS) {
+      // Force cleanup this orphaned run
+      ACTIVE_EMBEDDED_RUNS.delete(sessionId);
+      logSessionStateChange({
+        sessionId,
+        state: "idle",
+        reason: "orphan_cleanup_timeout",
+      });
+
+      // Abort the handle if possible
+      try {
+        metadata.handle.abort();
+      } catch {
+        // Ignore abort errors
+      }
+
+      // Notify any waiters
+      notifyEmbeddedRunEnded(sessionId);
+
+      diag.warn(`orphan run force-cleared: sessionId=${sessionId} durationMs=${duration}`);
+      cleanedCount++;
+    }
+  }
+
+  if (cleanedCount > 0) {
+    diag.info(
+      `orphan cleanup complete: cleared=${cleanedCount} remaining=${ACTIVE_EMBEDDED_RUNS.size}`,
+    );
+  }
+}
+
+// Start periodic orphan cleanup
+setInterval(cleanupOrphanedRuns, ORPHAN_CHECK_INTERVAL_MS);
+
 export function queueEmbeddedPiMessage(sessionId: string, text: string): boolean {
-  const handle = ACTIVE_EMBEDDED_RUNS.get(sessionId);
-  if (!handle) {
+  const metadata = ACTIVE_EMBEDDED_RUNS.get(sessionId);
+  if (!metadata) {
     diag.debug(`queue message failed: sessionId=${sessionId} reason=no_active_run`);
     return false;
   }
-  if (!handle.isStreaming()) {
+  if (!metadata.handle.isStreaming()) {
     diag.debug(`queue message failed: sessionId=${sessionId} reason=not_streaming`);
     return false;
   }
-  if (handle.isCompacting()) {
+  if (metadata.handle.isCompacting()) {
     diag.debug(`queue message failed: sessionId=${sessionId} reason=compacting`);
     return false;
   }
   logMessageQueued({ sessionId, source: "pi-embedded-runner" });
-  void handle.queueMessage(text);
+  void metadata.handle.queueMessage(text);
   return true;
 }
 
 export function abortEmbeddedPiRun(sessionId: string): boolean {
-  const handle = ACTIVE_EMBEDDED_RUNS.get(sessionId);
-  if (!handle) {
+  const metadata = ACTIVE_EMBEDDED_RUNS.get(sessionId);
+  if (!metadata) {
     diag.debug(`abort failed: sessionId=${sessionId} reason=no_active_run`);
     return false;
   }
   diag.debug(`aborting run: sessionId=${sessionId}`);
-  handle.abort();
+  metadata.handle.abort();
   return true;
 }
 
@@ -57,11 +112,11 @@ export function isEmbeddedPiRunActive(sessionId: string): boolean {
 }
 
 export function isEmbeddedPiRunStreaming(sessionId: string): boolean {
-  const handle = ACTIVE_EMBEDDED_RUNS.get(sessionId);
-  if (!handle) {
+  const metadata = ACTIVE_EMBEDDED_RUNS.get(sessionId);
+  if (!metadata) {
     return false;
   }
-  return handle.isStreaming();
+  return metadata.handle.isStreaming();
 }
 
 export function waitForEmbeddedPiRunEnd(sessionId: string, timeoutMs = 15_000): Promise<boolean> {
@@ -113,7 +168,12 @@ function notifyEmbeddedRunEnded(sessionId: string) {
 
 export function setActiveEmbeddedRun(sessionId: string, handle: EmbeddedPiQueueHandle) {
   const wasActive = ACTIVE_EMBEDDED_RUNS.has(sessionId);
-  ACTIVE_EMBEDDED_RUNS.set(sessionId, handle);
+  const metadata: RunMetadata = {
+    handle,
+    startTime: Date.now(),
+    sessionId,
+  };
+  ACTIVE_EMBEDDED_RUNS.set(sessionId, metadata);
   logSessionStateChange({
     sessionId,
     state: "processing",
@@ -125,7 +185,8 @@ export function setActiveEmbeddedRun(sessionId: string, handle: EmbeddedPiQueueH
 }
 
 export function clearActiveEmbeddedRun(sessionId: string, handle: EmbeddedPiQueueHandle) {
-  if (ACTIVE_EMBEDDED_RUNS.get(sessionId) === handle) {
+  const metadata = ACTIVE_EMBEDDED_RUNS.get(sessionId);
+  if (metadata && metadata.handle === handle) {
     ACTIVE_EMBEDDED_RUNS.delete(sessionId);
     logSessionStateChange({ sessionId, state: "idle", reason: "run_completed" });
     if (!sessionId.startsWith("probe-")) {
