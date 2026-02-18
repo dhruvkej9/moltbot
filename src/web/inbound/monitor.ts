@@ -19,8 +19,212 @@ import {
   extractText,
 } from "./extract.js";
 import { downloadInboundMedia } from "./media.js";
-import { createWebSendApi, ParticipantMentionInfo, resolveMentionJids } from "./send-api.js";
+import {
+  createWebSendApi,
+  extractMentionJids,
+  injectMentionTokens,
+  ParticipantMentionInfo,
+  resolveMentionJids,
+} from "./send-api.js";
 import type { WebInboundMessage, WebListenerCloseReason } from "./types.js";
+
+const OUTBOUND_MENTION_TOKEN_REGEX =
+  /@(\+?\d{6,20})(?:@(s\.whatsapp\.net|lid|hosted\.lid|hosted))?/gi;
+const MENTION_LEFT_BOUNDARY = /[\s([{"'`<]/;
+const MENTION_RIGHT_BOUNDARY = /[\s)\]}"'`>.,!?;:]/;
+const TAG_INTENT_REGEX = /\b(?:tag|mention|ping)\b/i;
+const SELF_MENTION_REGEX = /\b(?:me|myself|mujhe|muje|mujhko|mujko|merko|mereko|meko)\b/i;
+
+type MentionPolicy = {
+  allowedUsers: Set<string>;
+  preferredJidByUser: Map<string, string>;
+};
+
+function hasMentionBoundary(text: string, start: number, end: number): boolean {
+  const prev = start > 0 ? text[start - 1] : undefined;
+  const next = end < text.length ? text[end] : undefined;
+  const leftOk = prev === undefined || MENTION_LEFT_BOUNDARY.test(prev);
+  const rightOk = next === undefined || MENTION_RIGHT_BOUNDARY.test(next);
+  return leftOk && rightOk;
+}
+
+function extractDigits(value: string): string {
+  return value.replace(/\D/g, "");
+}
+
+function extractMentionUser(value: string): string {
+  return value.split("@")[0] ?? "";
+}
+
+function normalizeMentionUser(value: string): string {
+  const digits = extractDigits(value);
+  return digits || value;
+}
+
+function preferredParticipantJid(participant: ParticipantMentionInfo): string {
+  const phoneDigits = extractDigits(participant.phoneNumber ?? "");
+  if (phoneDigits.length >= 6) {
+    return `${phoneDigits}@s.whatsapp.net`;
+  }
+  return participant.jid;
+}
+
+function buildPreferredMentionMap(
+  participants: ParticipantMentionInfo[] | undefined,
+): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const participant of participants ?? []) {
+    const preferredJid = preferredParticipantJid(participant);
+    const preferredUser = normalizeMentionUser(extractMentionUser(preferredJid));
+    const participantUser = normalizeMentionUser(extractMentionUser(participant.jid));
+    if (preferredUser) {
+      map.set(preferredUser, preferredJid);
+    }
+    if (participantUser) {
+      map.set(participantUser, preferredJid);
+    }
+  }
+  return map;
+}
+
+function isWordChar(ch: string | undefined): boolean {
+  return Boolean(ch && /[a-z0-9_]/i.test(ch));
+}
+
+function includesName(text: string, name: string): boolean {
+  const hay = text.toLowerCase();
+  const needle = name.trim().toLowerCase();
+  if (!needle) {
+    return false;
+  }
+  let idx = hay.indexOf(needle);
+  while (idx >= 0) {
+    const prev = idx > 0 ? hay[idx - 1] : undefined;
+    const next = idx + needle.length < hay.length ? hay[idx + needle.length] : undefined;
+    if (!isWordChar(prev) && !isWordChar(next)) {
+      return true;
+    }
+    idx = hay.indexOf(needle, idx + 1);
+  }
+  return false;
+}
+
+function resolveMentionPolicy(params: {
+  inboundBody: string;
+  mentionedJids?: string[];
+  senderJid?: string;
+  senderE164?: string;
+  participants?: ParticipantMentionInfo[];
+}): MentionPolicy | null {
+  if (!TAG_INTENT_REGEX.test(params.inboundBody)) {
+    return null;
+  }
+
+  const preferredJidByUser = buildPreferredMentionMap(params.participants);
+  const requestedUsers = new Set<string>();
+
+  for (const mentionJid of extractMentionJids(params.inboundBody)) {
+    const user = normalizeMentionUser(extractMentionUser(mentionJid));
+    if (!user) {
+      continue;
+    }
+    requestedUsers.add(user);
+  }
+  for (const mentionJid of params.mentionedJids ?? []) {
+    const user = normalizeMentionUser(extractMentionUser(mentionJid));
+    if (!user) {
+      continue;
+    }
+    requestedUsers.add(user);
+  }
+
+  for (const participant of params.participants ?? []) {
+    const names = [participant.name, participant.notify].filter((value): value is string =>
+      Boolean(value && value.trim().length >= 3),
+    );
+    for (const candidateName of names) {
+      if (includesName(params.inboundBody, candidateName)) {
+        const user = normalizeMentionUser(extractMentionUser(preferredParticipantJid(participant)));
+        if (user) {
+          requestedUsers.add(user);
+        }
+        break;
+      }
+    }
+  }
+
+  if (requestedUsers.size > 0) {
+    const normalizedUsers = new Set<string>();
+    for (const user of requestedUsers) {
+      const preferredJid = preferredJidByUser.get(user);
+      if (preferredJid) {
+        normalizedUsers.add(normalizeMentionUser(extractMentionUser(preferredJid)));
+        continue;
+      }
+      normalizedUsers.add(user);
+      if (!preferredJidByUser.has(user)) {
+        preferredJidByUser.set(user, `${user}@s.whatsapp.net`);
+      }
+    }
+    return { allowedUsers: normalizedUsers, preferredJidByUser };
+  }
+
+  const senderUser = normalizeMentionUser(
+    extractMentionUser(params.senderJid ?? params.senderE164 ?? ""),
+  );
+  if (!senderUser) {
+    return null;
+  }
+
+  if (!preferredJidByUser.has(senderUser)) {
+    preferredJidByUser.set(senderUser, `${senderUser}@s.whatsapp.net`);
+  }
+  const allowSender =
+    SELF_MENTION_REGEX.test(params.inboundBody) || TAG_INTENT_REGEX.test(params.inboundBody);
+  if (!allowSender) {
+    return null;
+  }
+  return { allowedUsers: new Set([senderUser]), preferredJidByUser };
+}
+
+function stripDisallowedMentionTokens(text: string, allowedUsers: Set<string>): string {
+  let changed = false;
+  OUTBOUND_MENTION_TOKEN_REGEX.lastIndex = 0;
+  const stripped = text.replace(
+    OUTBOUND_MENTION_TOKEN_REGEX,
+    (
+      token: string,
+      rawNumber: string,
+      _domain: string | undefined,
+      offset: number,
+      fullText: string,
+    ) => {
+      const start = Number(offset);
+      const end = start + token.length;
+      if (!hasMentionBoundary(fullText, start, end)) {
+        return token;
+      }
+      const user = normalizeMentionUser(rawNumber);
+      if (!user || allowedUsers.has(user)) {
+        return `@${user}`;
+      }
+      changed = true;
+      return "";
+    },
+  );
+  if (!changed) {
+    return stripped;
+  }
+  return stripped
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function userFromJid(jid: string): string {
+  return normalizeMentionUser(extractMentionUser(jid));
+}
 
 export async function monitorWebInbox(options: {
   verbose: boolean;
@@ -293,6 +497,39 @@ export async function monitorWebInbox(options: {
       }
 
       const chatJid = remoteJid;
+      const mentionedJids = extractMentionedJids(msg.message as proto.IMessage | undefined);
+      const mentionPolicy = resolveMentionPolicy({
+        inboundBody: body,
+        mentionedJids: mentionedJids ?? undefined,
+        senderJid: participantJid,
+        senderE164: senderE164 ?? undefined,
+        participants: groupParticipantInfo,
+      });
+      const resolveOutboundMentions = async (text: string) => {
+        const policyText = mentionPolicy
+          ? stripDisallowedMentionTokens(text, mentionPolicy.allowedUsers)
+          : text;
+        let mentionJids = await resolveMentionJids(policyText, {
+          lidLookup,
+          participants: groupParticipantInfo,
+        });
+
+        if (mentionPolicy) {
+          mentionJids = mentionJids.filter((jid) =>
+            mentionPolicy.allowedUsers.has(userFromJid(jid)),
+          );
+          if (mentionJids.length === 0) {
+            mentionJids = [...mentionPolicy.allowedUsers].map(
+              (user) => mentionPolicy.preferredJidByUser.get(user) ?? `${user}@s.whatsapp.net`,
+            );
+          }
+        }
+
+        return {
+          mentionJids,
+          outgoingText: injectMentionTokens(policyText, mentionJids),
+        };
+      };
       const sendComposing = async () => {
         try {
           await sock.sendPresenceUpdate("composing", chatJid);
@@ -301,12 +538,9 @@ export async function monitorWebInbox(options: {
         }
       };
       const reply = async (text: string) => {
-        const mentionJids = await resolveMentionJids(text, {
-          lidLookup,
-          participants: groupParticipantInfo,
-        });
+        const { mentionJids, outgoingText } = await resolveOutboundMentions(text);
         const mentionPayload = mentionJids.length > 0 ? { mentions: mentionJids } : {};
-        await sock.sendMessage(chatJid, { text, ...mentionPayload });
+        await sock.sendMessage(chatJid, { text: outgoingText, ...mentionPayload });
       };
       const sendMedia = async (payload: AnyMessageContent) => {
         const caption = (payload as { caption?: unknown }).caption;
@@ -316,19 +550,19 @@ export async function monitorWebInbox(options: {
           return;
         }
 
-        const mentionJids = await resolveMentionJids(body, {
-          lidLookup,
-          participants: groupParticipantInfo,
-        });
+        const { mentionJids, outgoingText: mentionCaption } = await resolveOutboundMentions(body);
         if (mentionJids.length === 0) {
           await sock.sendMessage(chatJid, payload);
           return;
         }
 
-        await sock.sendMessage(chatJid, { ...payload, mentions: mentionJids });
+        await sock.sendMessage(chatJid, {
+          ...payload,
+          caption: mentionCaption,
+          mentions: mentionJids,
+        });
       };
       const timestamp = messageTimestampMs;
-      const mentionedJids = extractMentionedJids(msg.message as proto.IMessage | undefined);
       const senderName = msg.pushName ?? undefined;
 
       inboundLogger.info(

@@ -5,7 +5,7 @@ vi.mock("../../infra/channel-activity.js", () => ({
   recordChannelActivity: (...args: unknown[]) => recordChannelActivity(...args),
 }));
 
-import { createWebSendApi } from "./send-api.js";
+import { createWebSendApi, resolveMentionJids } from "./send-api.js";
 
 describe("createWebSendApi", () => {
   const sendMessage = vi.fn(async () => ({ key: { id: "msg-1" } }));
@@ -154,5 +154,31 @@ describe("createWebSendApi", () => {
   it("sends composing presence updates to the recipient JID", async () => {
     await api.sendComposingTo("+1555");
     expect(sendPresenceUpdate).toHaveBeenCalledWith("composing", "1555@s.whatsapp.net");
+  });
+
+  it("keeps phone-number mention payloads even when lid mapping exists", async () => {
+    const mentions = await resolveMentionJids("@918076538956 done", {
+      lidLookup: {
+        getLIDForPN: async () => "155933250478325@lid",
+        getPNForLID: async () => "918076538956@s.whatsapp.net",
+      },
+    });
+    expect(mentions).toEqual(["918076538956@s.whatsapp.net"]);
+  });
+
+  it("prefers participant phone number over lid user for name mentions", async () => {
+    const mentions = await resolveMentionJids("@Dhruv done", {
+      participants: [
+        {
+          jid: "155933250478325@lid",
+          name: "Dhruv Kejriwal",
+          phoneNumber: "+918076538956",
+        },
+      ],
+      lidLookup: {
+        getPNForLID: async () => "918076538956@s.whatsapp.net",
+      },
+    });
+    expect(mentions).toEqual(["918076538956@s.whatsapp.net"]);
   });
 });
