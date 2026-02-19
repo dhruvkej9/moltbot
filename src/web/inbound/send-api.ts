@@ -2,17 +2,19 @@ import type { AnyMessageContent, WAPresence } from "@whiskeysockets/baileys";
 import { recordChannelActivity } from "../../infra/channel-activity.js";
 import { toWhatsappJid } from "../../utils.js";
 import type { ActiveWebSendOptions } from "../active-listener.js";
+import {
+  extractDigits,
+  mentionUserPart,
+  normalizeMentionJid,
+  toPreferredParticipantMentionJid,
+  type ParticipantMentionInfo,
+} from "./mention-utils.js";
+
+export type { ParticipantMentionInfo } from "./mention-utils.js";
 
 type MentionLidLookup = {
   getLIDForPN?: (pn: string) => Promise<string | null>;
   getPNForLID?: (lid: string) => Promise<string | null>;
-};
-
-export type ParticipantMentionInfo = {
-  jid: string;
-  name?: string;
-  notify?: string;
-  phoneNumber?: string;
 };
 
 const MENTION_TOKEN_REGEX = /@(\+?\d{6,20})(?:@(s\.whatsapp\.net|lid|hosted\.lid|hosted))?/gi;
@@ -62,10 +64,6 @@ function normalizeAliasForMatch(text: string): string {
   return normalizeTextForMatch(text)
     .replace(/[_\s]+/g, " ")
     .trim();
-}
-
-function extractDigits(text: string): string {
-  return text.replace(/\D/g, "");
 }
 
 export function extractMentionJids(text: string): string[] {
@@ -118,14 +116,6 @@ export function extractNameMentions(text: string): string[] {
   return [...names];
 }
 
-function normalizeMentionJid(jid: string): string {
-  return jid.replace(/:\d+(?=@)/, "").replace(/@hosted\.lid$/, "@lid");
-}
-
-function mentionUserPart(jid: string): string {
-  return jid.split("@")[0] ?? "";
-}
-
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -138,18 +128,6 @@ function buildMentionAliasPattern(alias: string): RegExp {
     .map((token) => escapeRegExp(token));
   const aliasPattern = tokens.join("[\\s_]+");
   return new RegExp(`@${aliasPattern}${MENTION_ALIAS_RIGHT_LOOKAHEAD}`, "i");
-}
-
-function toPreferredParticipantMentionJid(participant: ParticipantMentionInfo): string | null {
-  const phoneDigits = extractDigits(participant.phoneNumber ?? "");
-  if (phoneDigits.length >= 6) {
-    return `${phoneDigits}@s.whatsapp.net`;
-  }
-  const normalized = normalizeMentionJid(participant.jid);
-  if (normalized.endsWith("@s.whatsapp.net") || normalized.endsWith("@lid")) {
-    return normalized;
-  }
-  return null;
 }
 
 function findParticipantByName(

@@ -20,37 +20,19 @@ import {
 } from "./extract.js";
 import { downloadInboundMedia } from "./media.js";
 import {
+  extractDigits,
+  mentionUserPart,
+  normalizeMentionJid,
+  toPreferredParticipantMentionJid,
+  type ParticipantMentionInfo,
+} from "./mention-utils.js";
+import {
   createWebSendApi,
   extractNameMentions,
   injectMentionTokens,
-  ParticipantMentionInfo,
   resolveMentionJids,
 } from "./send-api.js";
 import type { WebInboundMessage, WebListenerCloseReason } from "./types.js";
-
-function extractDigits(value: string | null | undefined): string {
-  return (value ?? "").replace(/\D/g, "");
-}
-
-function normalizeMentionJid(jid: string): string {
-  return jid.replace(/:\d+(?=@)/, "").replace(/@hosted\.lid$/, "@lid");
-}
-
-function mentionUserPart(jid: string): string {
-  return jid.split("@")[0] ?? "";
-}
-
-function toParticipantMentionJid(participant: ParticipantMentionInfo): string | null {
-  const phoneDigits = extractDigits(participant.phoneNumber);
-  if (phoneDigits.length >= 6) {
-    return `${phoneDigits}@s.whatsapp.net`;
-  }
-  const normalized = normalizeMentionJid(participant.jid);
-  if (normalized.endsWith("@s.whatsapp.net") || normalized.endsWith("@lid")) {
-    return normalized;
-  }
-  return null;
-}
 
 function normalizeNameToken(value: string): string {
   return value
@@ -123,7 +105,7 @@ function inferMentionJidsFromNames(params: {
 
   const participantRecords = params.participants
     .map((participant) => {
-      const mentionJid = toParticipantMentionJid(participant);
+      const mentionJid = toPreferredParticipantMentionJid(participant);
       if (!mentionJid) {
         return null;
       }
