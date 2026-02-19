@@ -263,6 +263,7 @@ export const ToolsWebSearchSchema = z
         z.literal("perplexity"),
         z.literal("grok"),
         z.literal("gemini"),
+        z.literal("duckduckgo"),
         z.literal("kimi"),
       ])
       .optional(),
