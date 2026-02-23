@@ -2306,15 +2306,39 @@ public struct CronJob: Codable, Sendable {
 
 public struct CronListParams: Codable, Sendable {
     public let includedisabled: Bool?
+    public let limit: Int?
+    public let offset: Int?
+    public let query: String?
+    public let enabled: AnyCodable?
+    public let sortby: AnyCodable?
+    public let sortdir: AnyCodable?
 
     public init(
-        includedisabled: Bool?)
+        includedisabled: Bool?,
+        limit: Int?,
+        offset: Int?,
+        query: String?,
+        enabled: AnyCodable?,
+        sortby: AnyCodable?,
+        sortdir: AnyCodable?)
     {
         self.includedisabled = includedisabled
+        self.limit = limit
+        self.offset = offset
+        self.query = query
+        self.enabled = enabled
+        self.sortby = sortby
+        self.sortdir = sortdir
     }
 
     private enum CodingKeys: String, CodingKey {
         case includedisabled = "includeDisabled"
+        case limit
+        case offset
+        case query
+        case enabled
+        case sortby = "sortBy"
+        case sortdir = "sortDir"
     }
 }
 
@@ -2374,6 +2398,60 @@ public struct CronAddParams: Codable, Sendable {
     }
 }
 
+public struct CronRunsParams: Codable, Sendable {
+    public let scope: AnyCodable?
+    public let id: String?
+    public let jobid: String?
+    public let limit: Int?
+    public let offset: Int?
+    public let statuses: [AnyCodable]?
+    public let status: AnyCodable?
+    public let deliverystatuses: [AnyCodable]?
+    public let deliverystatus: AnyCodable?
+    public let query: String?
+    public let sortdir: AnyCodable?
+
+    public init(
+        scope: AnyCodable?,
+        id: String?,
+        jobid: String?,
+        limit: Int?,
+        offset: Int?,
+        statuses: [AnyCodable]?,
+        status: AnyCodable?,
+        deliverystatuses: [AnyCodable]?,
+        deliverystatus: AnyCodable?,
+        query: String?,
+        sortdir: AnyCodable?)
+    {
+        self.scope = scope
+        self.id = id
+        self.jobid = jobid
+        self.limit = limit
+        self.offset = offset
+        self.statuses = statuses
+        self.status = status
+        self.deliverystatuses = deliverystatuses
+        self.deliverystatus = deliverystatus
+        self.query = query
+        self.sortdir = sortdir
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case scope
+        case id
+        case jobid = "jobId"
+        case limit
+        case offset
+        case statuses
+        case status
+        case deliverystatuses = "deliveryStatuses"
+        case deliverystatus = "deliveryStatus"
+        case query
+        case sortdir = "sortDir"
+    }
+}
+
 public struct CronRunLogEntry: Codable, Sendable {
     public let ts: Int
     public let jobid: String
@@ -2389,6 +2467,10 @@ public struct CronRunLogEntry: Codable, Sendable {
     public let runatms: Int?
     public let durationms: Int?
     public let nextrunatms: Int?
+    public let model: String?
+    public let provider: String?
+    public let usage: [String: AnyCodable]?
+    public let jobname: String?
 
     public init(
         ts: Int,
@@ -2404,7 +2486,11 @@ public struct CronRunLogEntry: Codable, Sendable {
         sessionkey: String?,
         runatms: Int?,
         durationms: Int?,
-        nextrunatms: Int?)
+        nextrunatms: Int?,
+        model: String?,
+        provider: String?,
+        usage: [String: AnyCodable]?,
+        jobname: String?)
     {
         self.ts = ts
         self.jobid = jobid
@@ -2420,6 +2506,10 @@ public struct CronRunLogEntry: Codable, Sendable {
         self.runatms = runatms
         self.durationms = durationms
         self.nextrunatms = nextrunatms
+        self.model = model
+        self.provider = provider
+        self.usage = usage
+        self.jobname = jobname
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -2437,6 +2527,10 @@ public struct CronRunLogEntry: Codable, Sendable {
         case runatms = "runAtMs"
         case durationms = "durationMs"
         case nextrunatms = "nextRunAtMs"
+        case model
+        case provider
+        case usage
+        case jobname = "jobName"
     }
 }
 
