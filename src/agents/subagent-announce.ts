@@ -355,6 +355,15 @@ async function waitForSubagentOutputChange(params: {
     }
     await new Promise((resolve) => setTimeout(resolve, RETRY_INTERVAL_MS));
   }
+  // Do one final read after timeout to reduce timing flake when the synthesized
+  // reply lands right as the polling window closes.
+  const finalRead = await readLatestSubagentOutput(params.sessionKey);
+  if (finalRead?.trim()) {
+    latest = finalRead;
+    if (finalRead.trim() !== baseline) {
+      return finalRead;
+    }
+  }
   return latest;
 }
 
