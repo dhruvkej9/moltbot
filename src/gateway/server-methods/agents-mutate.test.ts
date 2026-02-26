@@ -533,7 +533,7 @@ describe("agents.files.get/set symlink safety", () => {
     });
     mocks.fsLstat.mockImplementation(async (...args: unknown[]) => {
       const p = normalizePath(typeof args[0] === "string" ? args[0] : "");
-      if (p === candidate) {
+      if (matchesPath(p, candidate)) {
         return makeSymlinkStat();
       }
       throw createEnoentError();
@@ -566,7 +566,7 @@ describe("agents.files.get/set symlink safety", () => {
     });
     mocks.fsLstat.mockImplementation(async (...args: unknown[]) => {
       const p = normalizePath(typeof args[0] === "string" ? args[0] : "");
-      if (p === candidate) {
+      if (matchesPath(p, candidate)) {
         return makeSymlinkStat();
       }
       throw createEnoentError();
@@ -604,17 +604,17 @@ describe("agents.files.get/set symlink safety", () => {
     });
     mocks.fsLstat.mockImplementation(async (...args: unknown[]) => {
       const p = normalizePath(typeof args[0] === "string" ? args[0] : "");
-      if (p === candidate) {
+      if (matchesPath(p, candidate)) {
         return makeSymlinkStat({ dev: 9, ino: 41 });
       }
-      if (p === target) {
+      if (matchesPath(p, target)) {
         return targetStat;
       }
       throw createEnoentError();
     });
     mocks.fsStat.mockImplementation(async (...args: unknown[]) => {
       const p = normalizePath(typeof args[0] === "string" ? args[0] : "");
-      if (p === target) {
+      if (matchesPath(p, target)) {
         return targetStat;
       }
       throw createEnoentError();
