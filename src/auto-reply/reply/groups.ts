@@ -104,7 +104,7 @@ export function buildGroupChatContext(params: { sessionCtx: TemplateContext }): 
   );
   if (providerId === "whatsapp") {
     lines.push(
-      "When tagging in WhatsApp, use phone number format @<digits> from Participants data, NOT @Name or @nickname.",
+      "When tagging in WhatsApp, use phone number format @<digits> from Participants data (e.g. @919953301972), NOT @Name or @nickname.",
     );
   }
   return lines.join(" ");

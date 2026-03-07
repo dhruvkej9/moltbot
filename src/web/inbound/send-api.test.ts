@@ -250,7 +250,6 @@ describe("createWebSendApi", () => {
     });
     expect(mentions).toEqual([]);
   });
-
   it("resolves self alias mentions without participants", async () => {
     const mentions = await resolveMentionJids("@OpenClaw check this", {
       selfMentionJid: "14155550333:2@s.whatsapp.net",
@@ -266,7 +265,6 @@ describe("createWebSendApi", () => {
     });
     expect(mentions).toEqual([]);
   });
-
   it("sends self mention payload when text includes self alias", async () => {
     const sendMessageWithSelf = vi.fn(async () => ({ key: { id: "msg-self" } }));
     const apiWithSelf = createWebSendApi({
@@ -366,7 +364,6 @@ describe("createWebSendApi", () => {
     expect(getPNForLID).toHaveBeenCalledTimes(1);
     expect(getPNForLID).toHaveBeenCalledWith("199999999999999@lid");
   });
-
   it("appends canonical numeric mention tokens when mentions are missing", () => {
     const text = "roll call done 😎";
     const mentionJids = [

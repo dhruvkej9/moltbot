@@ -201,7 +201,6 @@ function selfAliasMentionMatchesToken(token: string, alias: string): boolean {
   }
   return false;
 }
-
 function collectNameAliases(value: string | undefined): string[] {
   const trimmed = (value ?? "").trim();
   if (!trimmed) {
