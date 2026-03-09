@@ -14,7 +14,8 @@ const REDIRECT_URI = "http://localhost:51121/oauth-callback";
 const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const DEFAULT_PROJECT_ID = "rising-fact-p41fc";
-const DEFAULT_MODEL = "google-antigravity/claude-opus-4-6-thinking";
+const DEFAULT_MODEL = "google-antigravity/gemini-3.1-pro-high";
+const GEMINI_CLI_USER_AGENT = "google-api-nodejs-client/9.15.1";
 
 const SCOPES = [
   "https://www.googleapis.com/auth/cloud-platform",
@@ -63,6 +64,18 @@ function generatePkce(): { verifier: string; challenge: string } {
 
 function shouldUseManualOAuthFlow(isRemote: boolean): boolean {
   return isRemote || isWSL2Sync();
+}
+
+function resolveCodeAssistPlatform(): "WINDOWS" | "MACOS" {
+  return process.platform === "win32" ? "WINDOWS" : "MACOS";
+}
+
+function buildCodeAssistMetadata(): { ideType: string; platform: string; pluginType: string } {
+  return {
+    ideType: "ANTIGRAVITY",
+    platform: resolveCodeAssistPlatform(),
+    pluginType: "GEMINI",
+  };
 }
 
 function buildAuthUrl(params: { challenge: string; state: string }): string {
@@ -183,7 +196,12 @@ async function exchangeCode(params: {
   const { clientId, clientSecret } = resolveOauthClientCredentials();
   const response = await fetch(TOKEN_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+      Accept: "*/*",
+      "Accept-Encoding": "gzip, deflate, br",
+      "User-Agent": GEMINI_CLI_USER_AGENT,
+    },
     body: new URLSearchParams({
       client_id: clientId,
       client_secret: clientSecret,
@@ -223,7 +241,10 @@ async function exchangeCode(params: {
 async function fetchUserEmail(accessToken: string): Promise<string | undefined> {
   try {
     const response = await fetch("https://www.googleapis.com/oauth2/v1/userinfo?alt=json", {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "User-Agent": GEMINI_CLI_USER_AGENT,
+      },
     });
     if (!response.ok) {
       return undefined;
@@ -236,16 +257,12 @@ async function fetchUserEmail(accessToken: string): Promise<string | undefined> 
 }
 
 async function fetchProjectId(accessToken: string): Promise<string> {
+  const metadata = buildCodeAssistMetadata();
   const headers = {
     Authorization: `Bearer ${accessToken}`,
     "Content-Type": "application/json",
-    "User-Agent": "antigravity/1.18.3 windows/amd64",
-    "X-Goog-Api-Client": "google-cloud-sdk vscode_cloudshelleditor/0.1",
-    "Client-Metadata": JSON.stringify({
-      ideType: "ANTIGRAVITY",
-      platform: "WINDOWS",
-      pluginType: "GEMINI",
-    }),
+    "User-Agent": GEMINI_CLI_USER_AGENT,
+    "Client-Metadata": JSON.stringify(metadata),
   };
 
   for (const endpoint of CODE_ASSIST_ENDPOINTS) {
@@ -254,11 +271,7 @@ async function fetchProjectId(accessToken: string): Promise<string> {
         method: "POST",
         headers,
         body: JSON.stringify({
-          metadata: {
-            ideType: "ANTIGRAVITY",
-            platform: "WINDOWS",
-            pluginType: "GEMINI",
-          },
+          metadata,
         }),
       });
 
