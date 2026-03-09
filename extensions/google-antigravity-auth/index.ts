@@ -14,7 +14,7 @@ const REDIRECT_URI = "http://localhost:51121/oauth-callback";
 const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const DEFAULT_PROJECT_ID = "rising-fact-p41fc";
-const DEFAULT_MODEL = "google-antigravity/gemini-3.1-pro-high";
+const DEFAULT_MODEL = "google-antigravity/claude-opus-4-6-thinking";
 const GEMINI_CLI_USER_AGENT = "google-api-nodejs-client/9.15.1";
 
 const SCOPES = [
