@@ -239,15 +239,11 @@ describe("loginGeminiCliOAuth", () => {
     "GOOGLE_CLOUD_PROJECT_ID",
   ] as const;
 
-  function getExpectedPlatform(): "WINDOWS" | "MACOS" | "PLATFORM_UNSPECIFIED" {
+  function getExpectedPlatform(): "WINDOWS" | "MACOS" {
     if (process.platform === "win32") {
       return "WINDOWS";
     }
-    if (process.platform === "darwin") {
-      return "MACOS";
-    }
-    // Matches updated resolvePlatform() which uses PLATFORM_UNSPECIFIED for Linux
-    return "PLATFORM_UNSPECIFIED";
+    return "MACOS";
   }
 
   function getRequestUrl(input: string | URL | Request): string {
@@ -366,9 +362,7 @@ describe("loginGeminiCliOAuth", () => {
     expect(loadRequests.map((request) => request.url)).toEqual([LOAD_PROD, LOAD_DAILY]);
 
     const firstHeaders = loadRequests[0]?.init?.headers;
-    expect(getHeaderValue(firstHeaders, "X-Goog-Api-Client")).toBe(
-      `gl-node/${process.versions.node}`,
-    );
+    expect(getHeaderValue(firstHeaders, "X-Goog-Api-Client")).toBeUndefined();
 
     const clientMetadata = getHeaderValue(firstHeaders, "Client-Metadata");
     expect(clientMetadata).toBeDefined();

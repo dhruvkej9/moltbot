@@ -31,6 +31,9 @@ const SCOPES = [
 const TIER_FREE = "free-tier";
 const TIER_LEGACY = "legacy-tier";
 const TIER_STANDARD = "standard-tier";
+const GEMINI_CLI_USER_AGENT = "google-api-nodejs-client/9.15.1";
+const CODE_ASSIST_IDE_TYPE = "ANTIGRAVITY";
+const CODE_ASSIST_PLUGIN_TYPE = "GEMINI";
 
 export type GeminiCliOAuthCredentials = {
   access: string;
@@ -224,16 +227,29 @@ function generatePkce(): { verifier: string; challenge: string } {
   return { verifier, challenge };
 }
 
-function resolvePlatform(): "WINDOWS" | "MACOS" | "PLATFORM_UNSPECIFIED" {
+function resolveCodeAssistPlatform(): "WINDOWS" | "MACOS" {
   if (process.platform === "win32") {
     return "WINDOWS";
   }
-  if (process.platform === "darwin") {
-    return "MACOS";
+  // Keep linux metadata aligned with antigravity-compatible header behavior.
+  return "MACOS";
+}
+
+function buildCodeAssistMetadata(params?: { duetProject?: string }): {
+  ideType: string;
+  platform: string;
+  pluginType: string;
+  duetProject?: string;
+} {
+  const metadata = {
+    ideType: CODE_ASSIST_IDE_TYPE,
+    platform: resolveCodeAssistPlatform(),
+    pluginType: CODE_ASSIST_PLUGIN_TYPE,
+  };
+  if (params?.duetProject) {
+    return { ...metadata, duetProject: params.duetProject };
   }
-  // Google's loadCodeAssist API rejects "LINUX" as an invalid Platform enum value.
-  // Use "PLATFORM_UNSPECIFIED" for Linux and other platforms to match the pi-ai runtime.
-  return "PLATFORM_UNSPECIFIED";
+  return metadata;
 }
 
 async function fetchWithTimeout(
@@ -416,7 +432,8 @@ async function exchangeCodeForTokens(
     headers: {
       "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
       Accept: "*/*",
-      "User-Agent": "google-api-nodejs-client/9.15.1",
+      "Accept-Encoding": "gzip, deflate, br",
+      "User-Agent": GEMINI_CLI_USER_AGENT,
     },
     body,
   });
@@ -452,7 +469,10 @@ async function exchangeCodeForTokens(
 async function getUserEmail(accessToken: string): Promise<string | undefined> {
   try {
     const response = await fetchWithTimeout(USERINFO_URL, {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "User-Agent": GEMINI_CLI_USER_AGENT,
+      },
     });
     if (response.ok) {
       const data = (await response.json()) as { email?: string };
@@ -466,26 +486,17 @@ async function getUserEmail(accessToken: string): Promise<string | undefined> {
 
 async function discoverProject(accessToken: string): Promise<string> {
   const envProject = process.env.GOOGLE_CLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT_ID;
-  const platform = resolvePlatform();
-  const metadata = {
-    ideType: "ANTIGRAVITY",
-    platform,
-    pluginType: "GEMINI",
-  };
+  const metadata = buildCodeAssistMetadata({ duetProject: envProject });
   const headers = {
     Authorization: `Bearer ${accessToken}`,
     "Content-Type": "application/json",
-    "User-Agent": "google-api-nodejs-client/9.15.1",
-    "X-Goog-Api-Client": `gl-node/${process.versions.node}`,
-    "Client-Metadata": JSON.stringify(metadata),
+    "User-Agent": GEMINI_CLI_USER_AGENT,
+    "Client-Metadata": JSON.stringify(buildCodeAssistMetadata()),
   };
 
   const loadBody = {
     ...(envProject ? { cloudaicompanionProject: envProject } : {}),
-    metadata: {
-      ...metadata,
-      ...(envProject ? { duetProject: envProject } : {}),
-    },
+    metadata,
   };
 
   let data: {
