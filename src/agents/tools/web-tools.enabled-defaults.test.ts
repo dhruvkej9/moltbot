@@ -15,6 +15,17 @@ function installMockFetch(payload: unknown) {
   return mockFetch;
 }
 
+function installTextFetch(payload: string) {
+  const mockFetch = vi.fn((_input?: unknown, _init?: unknown) =>
+    Promise.resolve({
+      ok: true,
+      text: () => Promise.resolve(payload),
+    } as Response),
+  );
+  global.fetch = withFetchPreconnect(mockFetch);
+  return mockFetch;
+}
+
 function createPerplexitySearchTool(perplexityConfig?: {
   apiKey?: string;
   baseUrl?: string;
@@ -68,9 +79,13 @@ function createKimiSearchTool(kimiConfig?: { apiKey?: string; baseUrl?: string; 
   });
 }
 
-function createProviderSearchTool(provider: "brave" | "perplexity" | "grok" | "gemini" | "kimi") {
+function createProviderSearchTool(
+  provider: "brave" | "duckduckgo" | "perplexity" | "grok" | "gemini" | "kimi",
+) {
   const searchConfig =
-    provider === "perplexity"
+    provider === "duckduckgo"
+      ? { provider }
+      : provider === "perplexity"
       ? { provider, perplexity: { apiKey: "pplx-config-test" } } // pragma: allowlist secret
       : provider === "grok"
         ? { provider, grok: { apiKey: "xai-config-test" } } // pragma: allowlist secret
@@ -123,10 +138,16 @@ function installPerplexityChatFetch(payload?: Record<string, unknown>) {
 }
 
 function createProviderSuccessPayload(
-  provider: "brave" | "perplexity" | "grok" | "gemini" | "kimi",
+  provider: "brave" | "duckduckgo" | "perplexity" | "grok" | "gemini" | "kimi",
 ) {
   if (provider === "brave") {
     return { web: { results: [] } };
+  }
+  if (provider === "duckduckgo") {
+    return `
+      <a class="result__a" href="https://duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com">Example</a>
+      <a class="result__snippet">Example snippet</a>
+    `;
   }
   if (provider === "perplexity") {
     return { results: [] };
@@ -200,6 +221,30 @@ describe("web tools defaults", () => {
     expect(mockFetch).toHaveBeenCalled();
     expect(String(mockFetch.mock.calls[0]?.[0])).toContain("generativelanguage.googleapis.com");
     expect((result?.details as { provider?: string } | undefined)?.provider).toBe("gemini");
+  });
+
+  it("supports duckduckgo without an API key", async () => {
+    const mockFetch = installTextFetch(
+      `
+        <a class="result__a" href="https://duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com">Example</a>
+        <a class="result__snippet">Example snippet</a>
+      `,
+    );
+    const tool = createProviderSearchTool("duckduckgo");
+
+    const result = await tool?.execute?.("call-duckduckgo", { query: "duckduckgo test" });
+
+    expect(mockFetch).toHaveBeenCalled();
+    expect(String(mockFetch.mock.calls[0]?.[0])).toContain("html.duckduckgo.com/html");
+    expect(result?.details).toMatchObject({
+      provider: "duckduckgo",
+      count: 1,
+    });
+    const firstResult = (result?.details as { results?: Array<Record<string, unknown>> } | undefined)
+      ?.results?.[0];
+    expect(firstResult?.url).toBe("https://example.com");
+    expect(String(firstResult?.title ?? "")).toContain("Example");
+    expect(String(firstResult?.description ?? "")).toContain("Example snippet");
   });
 });
 
@@ -305,11 +350,14 @@ describe("web_search provider proxy dispatch", () => {
     global.fetch = priorFetch;
   });
 
-  it.each(["brave", "perplexity", "grok", "gemini", "kimi"] as const)(
+  it.each(["brave", "duckduckgo", "perplexity", "grok", "gemini", "kimi"] as const)(
     "uses proxy-aware dispatcher for %s provider when HTTP_PROXY is configured",
     async (provider) => {
       vi.stubEnv("HTTP_PROXY", "http://127.0.0.1:7890");
-      const mockFetch = installMockFetch(createProviderSuccessPayload(provider));
+      const mockFetch =
+        provider === "duckduckgo"
+          ? installTextFetch(createProviderSuccessPayload(provider))
+          : installMockFetch(createProviderSuccessPayload(provider));
       const tool = createProviderSearchTool(provider);
       expect(tool).not.toBeNull();
 
