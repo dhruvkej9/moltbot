@@ -1175,7 +1175,8 @@ function decodeHtmlEntities(text: string): string {
 
 function decodeDuckDuckGoUrl(rawUrl: string): string {
   try {
-    const parsed = new URL(rawUrl);
+    const normalizedRawUrl = rawUrl.startsWith("//") ? `https:${rawUrl}` : rawUrl;
+    const parsed = new URL(normalizedRawUrl);
     const uddg = parsed.searchParams.get("uddg");
     if (uddg) {
       return decodeURIComponent(uddg);

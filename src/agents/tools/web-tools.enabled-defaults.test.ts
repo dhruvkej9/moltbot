@@ -145,7 +145,7 @@ function createProviderSuccessPayload(
   }
   if (provider === "duckduckgo") {
     return `
-      <a class="result__a" href="https://duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com">Example</a>
+      <a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com">Example</a>
       <a class="result__snippet">Example snippet</a>
     `;
   }
@@ -226,7 +226,7 @@ describe("web tools defaults", () => {
   it("supports duckduckgo without an API key", async () => {
     const mockFetch = installTextFetch(
       `
-        <a class="result__a" href="https://duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com">Example</a>
+        <a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com">Example</a>
         <a class="result__snippet">Example snippet</a>
       `,
     );
