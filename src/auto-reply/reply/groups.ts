@@ -121,7 +121,7 @@ function resolveProviderLabel(rawProvider: string | undefined): string {
 export function buildGroupChatContext(params: { sessionCtx: TemplateContext }): string {
   const subject = params.sessionCtx.GroupSubject?.trim();
   const members = params.sessionCtx.GroupMembers?.trim();
-  const providerId = normalizeChannelId(params.sessionCtx.Provider?.trim());
+  const providerId = normalizePluginChannelId(params.sessionCtx.Provider?.trim());
   const providerLabel = resolveProviderLabel(params.sessionCtx.Provider);
 
   const lines: string[] = [];
