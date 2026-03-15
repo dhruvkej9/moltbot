@@ -304,6 +304,33 @@ describe("runtime web tools resolution", () => {
     );
   });
 
+  it("accepts duckduckgo as a configured provider without invalid-provider warning", async () => {
+    const { metadata, context } = await runRuntimeWebTools({
+      config: asConfig({
+        tools: {
+          web: {
+            search: {
+              provider: "duckduckgo",
+            },
+          },
+        },
+      }),
+      env: {},
+    });
+
+    expect(metadata.search.providerConfigured).toBe("duckduckgo");
+    expect(metadata.search.providerSource).toBe("configured");
+    expect(metadata.search.selectedProvider).toBe("duckduckgo");
+    expect(context.warnings).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "WEB_SEARCH_PROVIDER_INVALID_AUTODETECT",
+          path: "tools.web.search.provider",
+        }),
+      ]),
+    );
+  });
+
   it("fails fast when configured provider ref is unresolved with no fallback", async () => {
     const sourceConfig = asConfig({
       tools: {
