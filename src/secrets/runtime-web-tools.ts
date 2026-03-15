@@ -417,7 +417,9 @@ export async function resolveRuntimeWebTools(params: {
   }
 
   if (searchEnabled && search) {
-    const candidates = configuredProvider ? [configuredProvider] : [...WEB_SEARCH_PROVIDERS_WITH_KEYS];
+    const candidates = configuredProvider
+      ? [configuredProvider]
+      : [...WEB_SEARCH_PROVIDERS_WITH_KEYS];
     const unresolvedWithoutFallback: Array<{
       provider: WebSearchProvider;
       path: string;
