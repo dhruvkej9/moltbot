@@ -594,6 +594,13 @@ function missingSearchKeyPayload(provider: (typeof SEARCH_PROVIDERS)[number]) {
       docs: "https://docs.openclaw.ai/tools/web",
     };
   }
+  if (provider === "duckduckgo") {
+    return {
+      error: "duckduckgo_search_unavailable",
+      message: "web_search (duckduckgo) failed to initialize.",
+      docs: "https://docs.openclaw.ai/tools/web",
+    };
+  }
   return {
     error: "missing_perplexity_api_key",
     message:
@@ -1180,7 +1187,7 @@ function decodeDuckDuckGoUrl(rawUrl: string): string {
     const parsed = new URL(normalizedRawUrl);
     const uddg = parsed.searchParams.get("uddg");
     if (uddg) {
-      return decodeURIComponent(uddg);
+      return uddg;
     }
   } catch {
     // Keep rawUrl when DuckDuckGo returns a relative or already-decoded link.
@@ -1194,17 +1201,26 @@ type DuckDuckGoResult = {
   snippet: string;
 };
 
+function readHtmlAttribute(tagAttributes: string, attribute: string): string {
+  return new RegExp(`\\b${attribute}="([^"]*)"`, "i").exec(tagAttributes)?.[1] ?? "";
+}
+
 function parseDuckDuckGoHtml(html: string): DuckDuckGoResult[] {
   const results: DuckDuckGoResult[] = [];
-  const resultRegex =
-    /<a[^>]+class="result__a"[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>((?:(?!<a[^>]+class="result__a").)*)/gi;
+  const resultRegex = /<a\b(?=[^>]*\bclass="[^"]*\bresult__a\b[^"]*")([^>]*)>([\s\S]*?)<\/a>/gi;
+  const nextResultRegex = /<a\b(?=[^>]*\bclass="[^"]*\bresult__a\b[^"]*")[^>]*>/i;
+  const snippetRegex = /<a\b(?=[^>]*\bclass="[^"]*\bresult__snippet\b[^"]*")[^>]*>([\s\S]*?)<\/a>/i;
 
   for (const match of html.matchAll(resultRegex)) {
-    const rawUrl = match[1] ?? "";
+    const rawAttributes = match[1] ?? "";
     const rawTitle = match[2] ?? "";
-    const trailingHtml = match[3] ?? "";
-    const rawSnippet =
-      /<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>/i.exec(trailingHtml)?.[1] ?? "";
+    const rawUrl = readHtmlAttribute(rawAttributes, "href");
+    const matchEnd = (match.index ?? 0) + match[0].length;
+    const trailingHtml = html.slice(matchEnd);
+    const nextResultIndex = trailingHtml.search(nextResultRegex);
+    const scopedTrailingHtml =
+      nextResultIndex >= 0 ? trailingHtml.slice(0, nextResultIndex) : trailingHtml;
+    const rawSnippet = snippetRegex.exec(scopedTrailingHtml)?.[1] ?? "";
     const url = decodeDuckDuckGoUrl(decodeHtmlEntities(rawUrl));
     const title = decodeHtmlEntities(stripHtml(rawTitle));
     const snippet = decodeHtmlEntities(stripHtml(rawSnippet));

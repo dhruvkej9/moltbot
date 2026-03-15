@@ -176,6 +176,14 @@ function createProviderSuccessPayload(
 }
 
 describe("web tools defaults", () => {
+  const priorFetch = global.fetch;
+
+  afterEach(() => {
+    webSearchTesting.SEARCH_CACHE.clear();
+    global.fetch = priorFetch;
+    vi.unstubAllEnvs();
+  });
+
   it("enables web_fetch by default (non-sandbox)", () => {
     const tool = createWebFetchTool({ config: {}, sandboxed: false });
     expect(tool?.name).toBe("web_fetch");
@@ -278,6 +286,32 @@ describe("web tools defaults", () => {
     expect(results[0]?.description ?? "").toBe("");
     expect(results[1]?.url).toBe("https://second.example");
     expect(results[1]?.description).toContain("Second snippet");
+  });
+
+  it("parses duckduckgo results when href comes before class and snippets span newlines", async () => {
+    const mockFetch = installTextFetch(
+      `
+        <a href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Fsearch%3Fa%3Db%252Fc%26next%3Dx%2526y" class="result__a">Example result</a>
+        <div class="result__extras">
+          <a href="/snippet" class="result__snippet">
+            Example snippet
+          </a>
+        </div>
+      `,
+    );
+    const tool = createProviderSearchTool("duckduckgo");
+
+    const result = await tool?.execute?.("call-duckduckgo-ordering", { query: "duckduckgo test" });
+
+    expect(mockFetch).toHaveBeenCalled();
+    const firstResult = (
+      result?.details as
+        | { results?: Array<{ url?: string; title?: string; description?: string }> }
+        | undefined
+    )?.results?.[0];
+    expect(firstResult?.url).toBe("https://example.com/search?a=b%2Fc&next=x%26y");
+    expect(firstResult?.title).toContain("Example result");
+    expect(firstResult?.description).toContain("Example snippet");
   });
 
   it("reuses the duckduckgo cache entry across unsupported filters", async () => {

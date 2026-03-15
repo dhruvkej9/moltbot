@@ -105,7 +105,7 @@ vi.mock("../../../src/config/config.js", async (importOriginal) => {
 vi.mock("../../../src/pairing/pairing-store.js", () => getPairingStoreMocks());
 
 vi.mock("./session.js", () => ({
-  createWaSocket: vi.fn().mockResolvedValue(sock),
+  createWaSocket: vi.fn(async () => sock),
   waitForWaConnection: vi.fn().mockResolvedValue(undefined),
   getStatusCode: vi.fn(() => 500),
 }));
