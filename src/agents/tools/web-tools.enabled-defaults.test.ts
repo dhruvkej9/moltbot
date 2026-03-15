@@ -245,11 +245,13 @@ describe("web tools defaults", () => {
       count: 1,
     });
     const firstResult = (
-      result?.details as { results?: Array<Record<string, unknown>> } | undefined
+      result?.details as
+        | { results?: Array<{ url?: string; title?: string; description?: string }> }
+        | undefined
     )?.results?.[0];
     expect(firstResult?.url).toBe("https://example.com");
-    expect(String(firstResult?.title ?? "")).toContain("Example's result");
-    expect(String(firstResult?.description ?? "")).toContain("Example's snippet");
+    expect(firstResult?.title).toContain("Example's result");
+    expect(firstResult?.description).toContain("Example's snippet");
   });
 
   it("keeps duckduckgo snippets aligned to the matching result", async () => {
@@ -268,13 +270,14 @@ describe("web tools defaults", () => {
     });
 
     expect(mockFetch).toHaveBeenCalled();
-    const results = ((result?.details as { results?: Array<Record<string, unknown>> } | undefined)
-      ?.results ?? []) as Array<Record<string, unknown>>;
-    expect(results).toHaveLength(2);
+    const results =
+      (result?.details as { results?: Array<{ url?: string; description?: string }> } | undefined)
+        ?.results ?? [];
+    expect(results.length).toBe(2);
     expect(results[0]?.url).toBe("https://first.example");
-    expect(String(results[0]?.description ?? "")).toBe("");
+    expect(results[0]?.description ?? "").toBe("");
     expect(results[1]?.url).toBe("https://second.example");
-    expect(String(results[1]?.description ?? "")).toContain("Second snippet");
+    expect(results[1]?.description).toContain("Second snippet");
   });
 
   it("reuses the duckduckgo cache entry across unsupported filters", async () => {
