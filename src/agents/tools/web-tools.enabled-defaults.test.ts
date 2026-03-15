@@ -86,14 +86,14 @@ function createProviderSearchTool(
     provider === "duckduckgo"
       ? { provider }
       : provider === "perplexity"
-      ? { provider, perplexity: { apiKey: "pplx-config-test" } } // pragma: allowlist secret
-      : provider === "grok"
-        ? { provider, grok: { apiKey: "xai-config-test" } } // pragma: allowlist secret
-        : provider === "gemini"
-          ? { provider, gemini: { apiKey: "gemini-config-test" } } // pragma: allowlist secret
-          : provider === "kimi"
-            ? { provider, kimi: { apiKey: "moonshot-config-test" } } // pragma: allowlist secret
-            : { provider, apiKey: "brave-config-test" }; // pragma: allowlist secret
+        ? { provider, perplexity: { apiKey: "pplx-config-test" } } // pragma: allowlist secret
+        : provider === "grok"
+          ? { provider, grok: { apiKey: "xai-config-test" } } // pragma: allowlist secret
+          : provider === "gemini"
+            ? { provider, gemini: { apiKey: "gemini-config-test" } } // pragma: allowlist secret
+            : provider === "kimi"
+              ? { provider, kimi: { apiKey: "moonshot-config-test" } } // pragma: allowlist secret
+              : { provider, apiKey: "brave-config-test" }; // pragma: allowlist secret
   return createWebSearchTool({
     config: {
       tools: {
@@ -240,11 +240,60 @@ describe("web tools defaults", () => {
       provider: "duckduckgo",
       count: 1,
     });
-    const firstResult = (result?.details as { results?: Array<Record<string, unknown>> } | undefined)
-      ?.results?.[0];
+    const firstResult = (
+      result?.details as { results?: Array<Record<string, unknown>> } | undefined
+    )?.results?.[0];
     expect(firstResult?.url).toBe("https://example.com");
     expect(String(firstResult?.title ?? "")).toContain("Example");
     expect(String(firstResult?.description ?? "")).toContain("Example snippet");
+  });
+
+  it("reuses the duckduckgo cache entry across unsupported filters", async () => {
+    webSearchTesting.SEARCH_CACHE.clear();
+    const mockFetch = installTextFetch(
+      `
+        <a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com">Example</a>
+        <a class="result__snippet">Example snippet</a>
+      `,
+    );
+    const firstTool = createWebSearchTool({
+      config: {
+        tools: {
+          web: {
+            search: {
+              provider: "duckduckgo",
+              grok: { apiKey: "xai-config-test", model: "grok-a", inlineCitations: false },
+            },
+          },
+        },
+      },
+      sandboxed: true,
+    });
+    const secondTool = createWebSearchTool({
+      config: {
+        tools: {
+          web: {
+            search: {
+              provider: "duckduckgo",
+              grok: { apiKey: "xai-config-test", model: "grok-b", inlineCitations: true },
+            },
+          },
+        },
+      },
+      sandboxed: true,
+    });
+    const first = await firstTool?.execute?.("call-duckduckgo-1", {
+      query: "duckduckgo test",
+      count: 5,
+    });
+    const second = await secondTool?.execute?.("call-duckduckgo-2", {
+      query: "duckduckgo test",
+      count: 5,
+    });
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(first?.details).toMatchObject({ provider: "duckduckgo", count: 1 });
+    expect(second?.details).toMatchObject({ provider: "duckduckgo", count: 1 });
   });
 });
 
