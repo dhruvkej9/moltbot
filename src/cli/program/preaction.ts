@@ -31,7 +31,6 @@ const PLUGIN_REQUIRED_COMMANDS = new Set([
   "channels",
   "directory",
   "agents",
-  "configure",
   "status",
   "health",
 ]);

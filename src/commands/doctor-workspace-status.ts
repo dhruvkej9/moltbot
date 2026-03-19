@@ -29,6 +29,7 @@ export function noteWorkspaceStatus(cfg: OpenClawConfig) {
   const pluginRegistry = loadOpenClawPlugins({
     config: cfg,
     workspaceDir,
+    mode: "validate",
     logger: {
       info: () => {},
       warn: () => {},
