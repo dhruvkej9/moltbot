@@ -29,7 +29,7 @@ Sandboxing details: [Sandboxing](/gateway/sandboxing)
 - At least 2 GB RAM for image build (`pnpm install` may be OOM-killed on 1 GB hosts with exit 137)
 - Enough disk for images + logs
 - If running on a VPS/public host, review
-  [Security hardening for network exposure](/gateway/security#04-network-exposure-bind--port--firewall),
+  [Security hardening for network exposure](/gateway/security#0-4-network-exposure-bind-port-firewall),
   especially Docker `DOCKER-USER` firewall policy.
 
 ## Containerized Gateway (Docker Compose)
@@ -51,7 +51,7 @@ From repo root:
 This script:
 
 - builds the gateway image locally (or pulls a remote image if `OPENCLAW_IMAGE` is set)
-- runs the onboarding wizard
+- runs onboarding
 - prints optional provider setup hints
 - starts the gateway via Docker Compose
 - generates a gateway token and writes it to `.env`
@@ -713,6 +713,7 @@ an optional noVNC observer (headful via Xvfb).
 
 Notes:
 
+- Docker and other headless/container browser flows stay on raw CDP. Chrome MCP `existing-session` is for host-local Chrome, not container takeover.
 - Headful (Xvfb) reduces bot blocking vs headless.
 - Headless can still be used by setting `agents.defaults.sandbox.browser.headless=true`.
 - No full desktop environment (GNOME) is needed; Xvfb provides the display.
