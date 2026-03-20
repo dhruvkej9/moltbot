@@ -86,14 +86,14 @@ function createProviderSearchTool(
     provider === "duckduckgo"
       ? { provider }
       : provider === "perplexity"
-      ? { provider, perplexity: { apiKey: "pplx-config-test" } } // pragma: allowlist secret
-      : provider === "grok"
-        ? { provider, grok: { apiKey: "xai-config-test" } } // pragma: allowlist secret
-        : provider === "gemini"
-          ? { provider, gemini: { apiKey: "gemini-config-test" } } // pragma: allowlist secret
-          : provider === "kimi"
-            ? { provider, kimi: { apiKey: "moonshot-config-test" } } // pragma: allowlist secret
-            : { provider, apiKey: "brave-config-test" }; // pragma: allowlist secret
+        ? { provider, perplexity: { apiKey: "pplx-config-test" } } // pragma: allowlist secret
+        : provider === "grok"
+          ? { provider, grok: { apiKey: "xai-config-test" } } // pragma: allowlist secret
+          : provider === "gemini"
+            ? { provider, gemini: { apiKey: "gemini-config-test" } } // pragma: allowlist secret
+            : provider === "kimi"
+              ? { provider, kimi: { apiKey: "moonshot-config-test" } } // pragma: allowlist secret
+              : { provider, apiKey: "brave-config-test" }; // pragma: allowlist secret
   return createWebSearchTool({
     config: {
       tools: {
@@ -240,11 +240,14 @@ describe("web tools defaults", () => {
       provider: "duckduckgo",
       count: 1,
     });
-    const firstResult = (result?.details as { results?: Array<Record<string, unknown>> } | undefined)
-      ?.results?.[0];
+    const firstResult = (
+      result?.details as { results?: Array<Record<string, unknown>> } | undefined
+    )?.results?.[0];
     expect(firstResult?.url).toBe("https://example.com");
-    expect(String(firstResult?.title ?? "")).toContain("Example");
-    expect(String(firstResult?.description ?? "")).toContain("Example snippet");
+    expect(typeof firstResult?.title === "string" ? firstResult.title : "").toContain("Example");
+    expect(typeof firstResult?.description === "string" ? firstResult.description : "").toContain(
+      "Example snippet",
+    );
   });
 });
 
