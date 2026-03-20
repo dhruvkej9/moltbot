@@ -6,7 +6,7 @@ import * as secretResolve from "./resolve.js";
 import { createResolverContext } from "./runtime-shared.js";
 import { resolveRuntimeWebTools } from "./runtime-web-tools.js";
 
-type ProviderUnderTest = "brave" | "gemini" | "grok" | "kimi" | "perplexity";
+type ProviderUnderTest = "brave" | "duckduckgo" | "gemini" | "grok" | "kimi" | "perplexity";
 
 const { resolvePluginWebSearchProvidersMock } = vi.hoisted(() => ({
   resolvePluginWebSearchProvidersMock: vi.fn(() => buildTestWebSearchProviders()),
@@ -99,6 +99,7 @@ function createTestProvider(params: {
 function buildTestWebSearchProviders(): PluginWebSearchProviderEntry[] {
   return [
     createTestProvider({ provider: "brave", pluginId: "brave", order: 10 }),
+    createTestProvider({ provider: "duckduckgo", pluginId: "duckduckgo", order: 15 }),
     createTestProvider({ provider: "gemini", pluginId: "google", order: 20 }),
     createTestProvider({ provider: "grok", pluginId: "xai", order: 30 }),
     createTestProvider({ provider: "kimi", pluginId: "moonshot", order: 40 }),

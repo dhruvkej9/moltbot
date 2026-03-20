@@ -3,6 +3,7 @@ import { loadPluginManifestRegistry } from "./manifest-registry.js";
 
 export const BUNDLED_WEB_SEARCH_PLUGIN_IDS = [
   "brave",
+  "duckduckgo",
   "firecrawl",
   "google",
   "moonshot",
@@ -23,7 +24,7 @@ export function resolveBundledWebSearchPluginIds(params: {
     env: params.env,
   });
   return registry.plugins
-    .filter((plugin) => plugin.origin === "bundled" && bundledWebSearchPluginIdSet.has(plugin.id))
+    .filter((plugin) => bundledWebSearchPluginIdSet.has(plugin.id))
     .map((plugin) => plugin.id)
     .toSorted((left, right) => left.localeCompare(right));
 }

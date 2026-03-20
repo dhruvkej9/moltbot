@@ -1,0 +1,20 @@
+{
+  "id": "duckduckgo",
+  "uiHints": {
+    "webSearch.note": {
+      "label": "DuckDuckGo",
+      "help": "DuckDuckGo Instant Answer search (no API key required)."
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "webSearch": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      }
+    }
+  }
+}
