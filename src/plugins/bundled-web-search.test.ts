@@ -72,6 +72,7 @@ describe("bundled web search metadata", () => {
       "google",
       "moonshot",
       "perplexity",
+      "tavily",
       "xai",
     ]);
   });
