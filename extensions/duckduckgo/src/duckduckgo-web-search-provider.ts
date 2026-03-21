@@ -188,12 +188,7 @@ function createDuckDuckGoToolDefinition(
       const count = resolveSearchCount(readNumberParam(args, "count"), DEFAULT_SEARCH_COUNT);
       const timeoutSeconds = resolveSearchTimeoutSeconds(searchConfig);
       const cacheTtlMs = resolveSearchCacheTtlMs(searchConfig);
-      const cacheKey = buildSearchCacheKey({
-        provider: "duckduckgo",
-        query,
-        count,
-        timeoutSeconds,
-      });
+      const cacheKey = buildSearchCacheKey(["duckduckgo", query, count, timeoutSeconds]);
 
       const cached = readCachedSearchPayload(cacheKey);
       if (cached) {
