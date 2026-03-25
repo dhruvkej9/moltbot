@@ -1,5 +1,7 @@
 import { EnvHttpProxyAgent } from "undici";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createEmptyPluginRegistry } from "../../plugins/registry.js";
+import { setActivePluginRegistry } from "../../plugins/runtime.js";
 import { withFetchPreconnect } from "../../test-utils/fetch-mock.js";
 import { __testing as webSearchTesting } from "./web-search.js";
 import { createWebFetchTool, createWebSearchTool } from "./web-tools.js";
@@ -171,6 +173,10 @@ function createProviderSuccessPayload(
   };
 }
 
+afterEach(() => {
+  setActivePluginRegistry(createEmptyPluginRegistry());
+});
+
 describe("web tools defaults", () => {
   it("enables web_fetch by default (non-sandbox)", () => {
     const tool = createWebFetchTool({ config: {}, sandboxed: false });
@@ -245,9 +251,58 @@ describe("web tools defaults", () => {
     )?.results?.[0];
     expect(firstResult?.url).toBe("https://example.com");
     expect(typeof firstResult?.title === "string" ? firstResult.title : "").toContain("Example");
-    expect(typeof firstResult?.description === "string" ? firstResult.description : "").toContain(
+    expect(typeof firstResult?.snippet === "string" ? firstResult.snippet : "").toContain(
       "Example snippet",
     );
+  });
+
+  it("uses runtime-only web_search providers when runtime metadata is present", () => {
+    const registry = createEmptyPluginRegistry();
+    registry.webSearchProviders.push({
+      pluginId: "custom-search",
+      pluginName: "Custom Search",
+      source: "test",
+      provider: {
+        id: "custom",
+        label: "Custom Search",
+        hint: "Custom runtime provider",
+        envVars: ["CUSTOM_SEARCH_API_KEY"],
+        placeholder: "custom-...",
+        signupUrl: "https://example.com/signup",
+        autoDetectOrder: 1,
+        credentialPath: "tools.web.search.custom.apiKey",
+        getCredentialValue: () => "configured",
+        setCredentialValue: () => {},
+        createTool: () => ({
+          description: "custom runtime tool",
+          parameters: {},
+          execute: async () => ({ ok: true }),
+        }),
+      },
+    });
+    setActivePluginRegistry(registry);
+
+    const tool = createWebSearchTool({
+      config: {
+        tools: {
+          web: {
+            search: {
+              provider: "custom",
+            },
+          },
+        },
+      },
+      sandboxed: true,
+      runtimeWebSearch: {
+        providerConfigured: "custom",
+        providerSource: "configured",
+        selectedProvider: "custom",
+        selectedProviderKeySource: "config",
+        diagnostics: [],
+      },
+    });
+
+    expect(tool?.description).toBe("custom runtime tool");
   });
 });
 

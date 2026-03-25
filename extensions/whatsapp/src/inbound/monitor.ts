@@ -231,6 +231,12 @@ function inferMentionJidsFromNames(params: {
   return { mentionJids: [...chosen], aliasHintsByUser: aliasHints };
 }
 
+const LOGGED_OUT_STATUS = DisconnectReason?.loggedOut ?? 401;
+
+function isGroupJid(jid: string): boolean {
+  return (typeof isJidGroup === "function" ? isJidGroup(jid) : jid.endsWith("@g.us")) === true;
+}
+
 export async function monitorWebInbox(options: {
   verbose: boolean;
   accountId: string;
@@ -415,7 +421,7 @@ export async function monitorWebInbox(options: {
       return null;
     }
 
-    const group = isJidGroup(remoteJid) === true;
+    const group = isGroupJid(remoteJid);
     if (id) {
       const dedupeKey = `${options.accountId}:${remoteJid}:${id}`;
       if (isRecentInboundMessage(dedupeKey)) {
@@ -782,7 +788,7 @@ export async function monitorWebInbox(options: {
         const status = getStatusCode(update.lastDisconnect?.error);
         resolveClose({
           status,
-          isLoggedOut: status === DisconnectReason.loggedOut,
+          isLoggedOut: status === LOGGED_OUT_STATUS,
           error: update.lastDisconnect?.error,
         });
       }

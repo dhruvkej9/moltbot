@@ -1,9 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const { runDuckDuckGoSearch } = vi.hoisted(() => ({
+  runDuckDuckGoSearch: vi.fn(async (params: Record<string, unknown>) => params),
+}));
+
+vi.mock("./ddg-client.js", () => ({
+  runDuckDuckGoSearch,
+}));
+
 describe("duckduckgo web search provider", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.resetModules();
+    runDuckDuckGoSearch.mockReset();
+    runDuckDuckGoSearch.mockImplementation(async (params: Record<string, unknown>) => params);
   });
 
   it("exposes keyless metadata and enables the plugin in config", async () => {
@@ -23,10 +33,6 @@ describe("duckduckgo web search provider", () => {
   });
 
   it("maps generic tool arguments into DuckDuckGo search params", async () => {
-    const ddgClient = await import("./ddg-client.js");
-    const runDuckDuckGoSearch = vi
-      .spyOn(ddgClient, "runDuckDuckGoSearch")
-      .mockImplementation(async (params) => params);
     const { createDuckDuckGoWebSearchProvider } = await import("./ddg-search-provider.js");
     const provider = createDuckDuckGoWebSearchProvider();
     const tool = provider.createTool({
