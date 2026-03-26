@@ -73,11 +73,16 @@ describe("web monitor inbox", () => {
     sock.ev.emit("messages.upsert", upsert);
     await waitForMessageCalls(onMessage, 1);
 
+    const expectedReplyToSender = options?.expectedReplyToSender ?? "+111";
+    const expectedReplyToSenderJid = options?.mappedPnForLid
+      ? options.mappedPnForLid.replace(/:\d+/, "")
+      : (options?.participant ?? "111@s.whatsapp.net");
+
     expect(onMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         replyToId: "q1",
         replyToBody: "original",
-        replyToSender: options?.expectedReplyToSender ?? "+111",
+        replyToSender: expectedReplyToSender,
         sender: expect.objectContaining({
           e164: "+999",
           name: "Tester",
@@ -86,9 +91,9 @@ describe("web monitor inbox", () => {
           id: "q1",
           body: "original",
           sender: expect.objectContaining({
-            jid: "111@s.whatsapp.net",
-            e164: "+111",
-            label: "+111",
+            jid: expectedReplyToSenderJid,
+            e164: expectedReplyToSender,
+            label: expectedReplyToSender,
           }),
         }),
         self: expect.objectContaining({

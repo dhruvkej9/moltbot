@@ -8,7 +8,11 @@ import { createSubsystemLogger } from "openclaw/plugin-sdk/runtime-env";
 import { getChildLogger } from "openclaw/plugin-sdk/text-runtime";
 import { resolveJidToE164 } from "openclaw/plugin-sdk/text-runtime";
 import { readWebSelfIdentity } from "../auth-store.js";
-import { getPrimaryIdentityId, resolveComparableIdentity } from "../identity.js";
+import {
+  getPrimaryIdentityId,
+  normalizeDeviceScopedJid,
+  resolveComparableIdentity,
+} from "../identity.js";
 import { createWaSocket, getStatusCode, waitForWaConnection } from "../session.js";
 import { checkInboundAccessControl } from "./access-control.js";
 import {
@@ -302,7 +306,11 @@ export async function monitorWebInbox(options: {
     }
     return undefined;
   })();
-  const selfMentionAliases = [typeof self.name === "string" ? self.name : undefined].filter(
+  const selfName =
+    typeof (sock.user as { name?: unknown } | undefined)?.name === "string"
+      ? ((sock.user as { name?: string }).name ?? undefined)
+      : undefined;
+  const selfMentionAliases = [selfName].filter(
     (alias): alias is string => Boolean(alias && alias.trim().length > 0),
   );
   const debouncer = createInboundDebouncer<WebInboundMessage>({
@@ -571,13 +579,42 @@ export async function monitorWebInbox(options: {
       }
     }
     let replyContext = describeReplyContext(msg.message as proto.IMessage | undefined);
-    if (replyContext?.senderJid) {
-      const resolvedReplySender = await resolveInboundJid(replyContext.senderJid);
-      if (resolvedReplySender) {
+    const rawReplySender = replyContext?.sender ?? null;
+    const rawReplyJid = normalizeDeviceScopedJid(rawReplySender?.jid);
+    const rawReplyLid =
+      normalizeDeviceScopedJid(rawReplySender?.lid) ??
+      (rawReplyJid?.endsWith("@lid") || rawReplyJid?.endsWith("@hosted.lid") ? rawReplyJid : null);
+    if (replyContext && (rawReplyJid || rawReplyLid)) {
+      let resolvedReplySenderJid = rawReplyJid;
+      if (!resolvedReplySenderJid && rawReplyLid && lidLookup?.getPNForLID) {
+        try {
+          resolvedReplySenderJid = normalizeDeviceScopedJid(
+            await lidLookup.getPNForLID(rawReplyLid),
+          );
+        } catch (err) {
+          logVerbose(`Quoted LID mapping lookup failed for ${rawReplyLid}: ${String(err)}`);
+        }
+      }
+      const resolvedReplySenderE164 =
+        (resolvedReplySenderJid && (await resolveInboundJid(resolvedReplySenderJid))) ??
+        (rawReplyLid && (await resolveInboundJid(rawReplyLid)));
+      if (resolvedReplySenderE164 || resolvedReplySenderJid || rawReplyLid) {
         replyContext = {
           ...replyContext,
-          sender: resolvedReplySender,
-          senderE164: resolvedReplySender,
+          sender: resolveComparableIdentity(
+            {
+              ...rawReplySender,
+              jid: resolvedReplySenderJid,
+              lid: rawReplyLid,
+              e164: resolvedReplySenderE164 ?? rawReplySender?.e164,
+              label:
+                resolvedReplySenderE164 ??
+                rawReplySender?.label ??
+                resolvedReplySenderJid ??
+                rawReplyLid,
+            },
+            options.authDir,
+          ),
         };
       }
     }
