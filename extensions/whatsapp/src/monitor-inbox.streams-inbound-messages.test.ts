@@ -78,6 +78,23 @@ describe("web monitor inbox", () => {
         replyToId: "q1",
         replyToBody: "original",
         replyToSender: options?.expectedReplyToSender ?? "+111",
+        sender: expect.objectContaining({
+          e164: "+999",
+          name: "Tester",
+        }),
+        replyTo: expect.objectContaining({
+          id: "q1",
+          body: "original",
+          sender: expect.objectContaining({
+            jid: "111@s.whatsapp.net",
+            e164: "+111",
+            label: "+111",
+          }),
+        }),
+        self: expect.objectContaining({
+          jid: "123@s.whatsapp.net",
+          e164: "+123",
+        }),
       }),
     );
     expect(sock.sendMessage).toHaveBeenCalledWith("999@s.whatsapp.net", {
@@ -484,5 +501,21 @@ describe("web monitor inbox", () => {
         expectedReplyToSender: "+444",
       },
     );
+  });
+
+  it("captures reply context from botInvokeMessage wrapped quoted messages", async () => {
+    await expectQuotedReplyContext({
+      botInvokeMessage: {
+        message: { conversation: "original" },
+      },
+    });
+  });
+
+  it("captures reply context from groupMentionedMessage wrapped quoted messages", async () => {
+    await expectQuotedReplyContext({
+      groupMentionedMessage: {
+        message: { conversation: "original" },
+      },
+    });
   });
 });
