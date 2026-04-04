@@ -139,9 +139,13 @@ function installPerplexityChatFetch(payload?: Record<string, unknown>) {
   );
 }
 
+function createProviderSuccessPayload(provider: "duckduckgo"): string;
+function createProviderSuccessPayload(
+  provider: "brave" | "perplexity" | "grok" | "gemini" | "kimi",
+): Record<string, unknown>;
 function createProviderSuccessPayload(
   provider: "brave" | "duckduckgo" | "perplexity" | "grok" | "gemini" | "kimi",
-) {
+): unknown {
   if (provider === "brave") {
     return { web: { results: [] } };
   }

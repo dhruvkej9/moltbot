@@ -229,8 +229,8 @@ export async function fetchAntigravityUsage(
       // Fatal auth errors - stop early
       if (res.status === 401) {
         return {
-          provider: "google-antigravity",
-          displayName: PROVIDER_LABELS["google-antigravity"],
+          provider: "google-gemini-cli",
+          displayName: PROVIDER_LABELS["google-gemini-cli"],
           windows: [],
           error: "Token expired",
         };
@@ -283,16 +283,16 @@ export async function fetchAntigravityUsage(
   if (windows.length === 0 && lastError) {
     logDebug(`[antigravity] Returning error snapshot: ${lastError}`);
     return {
-      provider: "google-antigravity",
-      displayName: PROVIDER_LABELS["google-antigravity"],
+      provider: "google-gemini-cli",
+      displayName: PROVIDER_LABELS["google-gemini-cli"],
       windows: [],
       error: lastError,
     };
   }
 
   const snapshot: ProviderUsageSnapshot = {
-    provider: "google-antigravity",
-    displayName: PROVIDER_LABELS["google-antigravity"],
+    provider: "google-gemini-cli",
+    displayName: PROVIDER_LABELS["google-gemini-cli"],
     windows,
     plan: planInfo,
   };

@@ -1,12 +1,9 @@
 import { createHash, randomBytes } from "node:crypto";
 import { createServer } from "node:http";
-import {
-  buildOauthProviderAuthResult,
-  emptyPluginConfigSchema,
-  isWSL2Sync,
-  type OpenClawPluginApi,
-  type ProviderAuthContext,
-} from "openclaw/plugin-sdk";
+import { emptyPluginConfigSchema } from "openclaw/plugin-sdk";
+import type { OpenClawPluginApi, ProviderAuthContext } from "openclaw/plugin-sdk/plugin-entry";
+import { buildOauthProviderAuthResult } from "openclaw/plugin-sdk/provider-auth-result";
+import { isWSL2Sync } from "openclaw/plugin-sdk/runtime-env";
 
 const OAUTH_CLIENT_ID_ENV = "GOOGLE_ANTIGRAVITY_CLIENT_ID";
 const OAUTH_CLIENT_SECRET_ENV = "GOOGLE_ANTIGRAVITY_CLIENT_SECRET";
