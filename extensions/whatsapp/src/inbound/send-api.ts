@@ -1,5 +1,5 @@
 import type { AnyMessageContent, WAPresence } from "@whiskeysockets/baileys";
-import { recordChannelActivity } from "openclaw/plugin-sdk/infra-runtime";
+import { recordChannelActivity } from "openclaw/plugin-sdk/channel-runtime";
 import { toWhatsappJid } from "openclaw/plugin-sdk/text-runtime";
 import type { ActiveWebSendOptions } from "../active-listener.js";
 import {
@@ -584,6 +584,9 @@ export function createWebSendApi(params: {
       const mentionPayload = mentionJids.length > 0 ? { mentions: mentionJids } : undefined;
 
       let payload: AnyMessageContent;
+      if (mediaBuffer) {
+        mediaType ??= "application/octet-stream";
+      }
       if (mediaBuffer && mediaType) {
         if (mediaType.startsWith("image/")) {
           payload = {
