@@ -336,10 +336,18 @@ describe("web monitor inbox", () => {
     sock.ev.emit("messages.upsert", upsert);
     await tick();
 
-    expect(sock.sendMessage).toHaveBeenCalledWith("120363425190157453@g.us", {
-      text: "@14155550111 @14155550222 done ✅",
-      mentions: ["14155550111@s.whatsapp.net", "14155550222@s.whatsapp.net"],
-    });
+    expect(sock.sendMessage).toHaveBeenCalledWith(
+      "120363425190157453@g.us",
+      {
+        text: "@14155550111 @14155550222 done ✅",
+        mentions: ["14155550111@s.whatsapp.net", "14155550222@s.whatsapp.net"],
+      },
+      expect.objectContaining({
+        quoted: expect.objectContaining({
+          key: expect.objectContaining({ id: "g-1", remoteJid: "120363425190157453@g.us" }),
+        }),
+      }),
+    );
 
     await listener.close();
   });
@@ -361,9 +369,17 @@ describe("web monitor inbox", () => {
     sock.ev.emit("messages.upsert", upsert);
     await tick();
 
-    expect(sock.sendMessage).toHaveBeenCalledWith("120363425190157453@g.us", {
-      text: "done ✅",
-    });
+    expect(sock.sendMessage).toHaveBeenCalledWith(
+      "120363425190157453@g.us",
+      {
+        text: "done ✅",
+      },
+      expect.objectContaining({
+        quoted: expect.objectContaining({
+          key: expect.objectContaining({ id: "g-2", remoteJid: "120363425190157453@g.us" }),
+        }),
+      }),
+    );
 
     await listener.close();
   });

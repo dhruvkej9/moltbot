@@ -1,4 +1,9 @@
-import type { AnyMessageContent, proto, WAMessage } from "@whiskeysockets/baileys";
+import type {
+  AnyMessageContent,
+  MiscMessageGenerationOptions,
+  proto,
+  WAMessage,
+} from "@whiskeysockets/baileys";
 import { DisconnectReason, isJidGroup } from "@whiskeysockets/baileys";
 import { createInboundDebouncer, formatLocationText } from "openclaw/plugin-sdk/channel-inbound";
 import { recordChannelActivity } from "openclaw/plugin-sdk/channel-runtime";
@@ -397,9 +402,29 @@ export async function monitorWebInbox(options: {
     });
   };
 
-  const sendTrackedMessage = async (jid: string, content: AnyMessageContent) => {
-    const result = await sock.sendMessage(jid, content);
+  const outboundMessageIds = new Map<string, { remoteJid: string; sentAt: number }>();
+
+  const trackOutboundMessageId = (remoteJid: string, result: unknown) => {
+    const messageId =
+      typeof result === "object" && result && "key" in result
+        ? String((result as { key?: { id?: string } }).key?.id ?? "")
+        : "";
+    if (!messageId) {
+      return;
+    }
+    outboundMessageIds.set(messageId, { remoteJid, sentAt: Date.now() });
+  };
+
+  const sendTrackedMessage = async (
+    jid: string,
+    content: AnyMessageContent,
+    options?: MiscMessageGenerationOptions,
+  ) => {
+    const result = options
+      ? await sock.sendMessage(jid, content, options)
+      : await sock.sendMessage(jid, content);
     rememberOutboundMessage(jid, result);
+    trackOutboundMessageId(jid, result);
     return result;
   };
 
@@ -743,25 +768,27 @@ export async function monitorWebInbox(options: {
     const reply = async (text: string) => {
       const { mentionJids, outgoingText } = await resolveOutboundMentions(text);
       const mentionPayload = mentionJids.length > 0 ? { mentions: mentionJids } : {};
+      const sendOptions = inbound.group ? { quoted: msg } : undefined;
       if (inbound.group && (mentionJids.length > 0 || text.includes("@"))) {
         inboundLogger.debug(
           { chatJid, mentionCount: mentionJids.length, mentionJids },
           "sending outbound text reply",
         );
       }
-      await sendTrackedMessage(chatJid, { text: outgoingText, ...mentionPayload });
+      await sendTrackedMessage(chatJid, { text: outgoingText, ...mentionPayload }, sendOptions);
     };
     const sendMedia = async (payload: AnyMessageContent) => {
+      const sendOptions = inbound.group ? { quoted: msg } : undefined;
       const caption = (payload as { caption?: unknown }).caption;
       const body = typeof caption === "string" ? caption : "";
       if (!body) {
-        await sendTrackedMessage(chatJid, payload);
+        await sendTrackedMessage(chatJid, payload, sendOptions);
         return;
       }
 
       const { mentionJids, outgoingText: mentionCaption } = await resolveOutboundMentions(body);
       if (mentionJids.length === 0) {
-        await sendTrackedMessage(chatJid, payload);
+        await sendTrackedMessage(chatJid, payload, sendOptions);
         return;
       }
 
@@ -772,11 +799,15 @@ export async function monitorWebInbox(options: {
         );
       }
 
-      await sendTrackedMessage(chatJid, {
-        ...payload,
-        caption: mentionCaption,
-        mentions: mentionJids,
-      });
+      await sendTrackedMessage(
+        chatJid,
+        {
+          ...payload,
+          caption: mentionCaption,
+          mentions: mentionJids,
+        },
+        sendOptions,
+      );
     };
     const timestamp = inbound.messageTimestampMs;
 
@@ -897,6 +928,37 @@ export async function monitorWebInbox(options: {
       resolveClose({ status: undefined, isLoggedOut: false, error: err });
     }
   };
+  const handleMessagesUpdate = (
+    updates: Array<{
+      key?: { id?: string; remoteJid?: string };
+      update?: { status?: unknown };
+      status?: unknown;
+    }>,
+  ) => {
+    for (const entry of updates ?? []) {
+      const messageId = String(entry?.key?.id ?? "");
+      if (!messageId) {
+        continue;
+      }
+      const tracked = outboundMessageIds.get(messageId);
+      if (!tracked) {
+        continue;
+      }
+      const status = entry?.update?.status ?? entry?.status ?? null;
+      inboundLogger.info(
+        {
+          messageId,
+          remoteJid: tracked.remoteJid,
+          status,
+          ageMs: Date.now() - tracked.sentAt,
+        },
+        "outbound message status update",
+      );
+      if (typeof status === "number" && status >= 1) {
+        outboundMessageIds.delete(messageId);
+      }
+    }
+  };
   const detachMessagesUpsert = attachEmitterListener(
     sock.ev as unknown as {
       on: (event: string, listener: (...args: unknown[]) => void) => void;
@@ -914,6 +976,15 @@ export async function monitorWebInbox(options: {
     },
     "connection.update",
     handleConnectionUpdate as unknown as (...args: unknown[]) => void,
+  );
+  const detachMessagesUpdate = attachEmitterListener(
+    sock.ev as unknown as {
+      on: (event: string, listener: (...args: unknown[]) => void) => void;
+      off?: (event: string, listener: (...args: unknown[]) => void) => void;
+      removeListener?: (event: string, listener: (...args: unknown[]) => void) => void;
+    },
+    "messages.update",
+    handleMessagesUpdate as unknown as (...args: unknown[]) => void,
   );
 
   void (async () => {
@@ -953,6 +1024,7 @@ export async function monitorWebInbox(options: {
       try {
         detachMessagesUpsert();
         detachConnectionUpdate();
+        detachMessagesUpdate();
         closeInboundMonitorSocket(sock);
       } catch (err) {
         logVerbose(`Socket close failed: ${String(err)}`);
